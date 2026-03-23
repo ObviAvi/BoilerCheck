@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 app = FastAPI()
 
@@ -46,10 +47,14 @@ def check():
                         "text": "Only approved electrical appliances are permitted in residence halls to reduce fire risk."
                     },
                     {
-                        "section_title": "Restricted Equipment",
+                        "section_title": "Restricted Equipments",
                         "text": "High-wattage and heat-producing devices that pose safety hazards are restricted in student housing."
                     }
                 ]
             }
         ]
     }
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
