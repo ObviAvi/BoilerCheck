@@ -1,59 +1,30 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 
-app = FastAPI()
+from rag import query as rag_query
 
-# Allow frontend to connect
+app = FastAPI(title="BoilerCheck API")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=False,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
-@app.get("/check")
-def check():
-    return {
-        "answer": "Certain small appliances are allowed in Purdue University residences, such as microwaves, mini refrigerators, and coffee makers. However, high-heat or open-coil appliances like hot plates, space heaters, and toaster ovens are typically not allowed for safety reasons.",
-        "documents": [
-            {
-                "document_id": "purdue_housing_safety_1",
-                "title": "University Residences – Safety Guidelines",
-                "domain": "housing",
-                "url": "https://www.housing.purdue.edu/my-housing/info/general/residence-hall-guidelines.html",
-                "effective_date": "2024-08-15",
-                "sections": [
-                    {
-                        "section_title": "Allowed Appliances",
-                        "text": "Residents may use approved small appliances such as microwaves and mini refrigerators that meet university safety standards."
-                    },
-                    {
-                        "section_title": "Prohibited Appliances",
-                        "text": "Appliances with open heating elements such as hot plates, space heaters, and toaster ovens are not permitted in residence halls."
-                    }
-                ]
-            },
-            {
-                "document_id": "purdue_fire_safety",
-                "title": "Purdue Fire Safety – Residence Hall Policies",
-                "domain": "safety",
-                "url": "https://www.purdue.edu/ehps/fire-safety/",
-                "effective_date": "2024-08-15",
-                "sections": [
-                    {
-                        "section_title": "Electrical Safety",
-                        "text": "Only approved electrical appliances are permitted in residence halls to reduce fire risk."
-                    },
-                    {
-                        "section_title": "Restricted Equipments",
-                        "text": "High-wattage and heat-producing devices that pose safety hazards are restricted in student housing."
-                    }
-                ]
-            }
-        ]
-    }
+
+class AskRequest(BaseModel):
+    query: str
+
+
+@app.post("/ask")
+def ask(body: AskRequest):
+    if not body.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    return rag_query(body.query)
 
 
 if __name__ == "__main__":

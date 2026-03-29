@@ -19,10 +19,15 @@ export default function Home() {
     setError("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/check");
+      const res = await fetch("http://127.0.0.1:8000/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
 
       if (!res.ok) {
-        throw new Error(`Backend returned status ${res.status}`);
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail?.detail ?? `Backend returned status ${res.status}`);
       }
 
       const json = await res.json();
@@ -33,7 +38,7 @@ export default function Home() {
       });
     } catch (err) {
       console.error("Failed to fetch backend response:", err);
-      setError("Could not connect to backend. Make sure FastAPI is running on port 8000.");
+      setError(err.message || "Could not connect to backend. Make sure FastAPI is running on port 8000.");
     } finally {
       setLoading(false);
     }

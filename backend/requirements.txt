@@ -1,2 +1,24 @@
-fastapi
-uvicorn
+# Web server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+pydantic>=2.0.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Embeddings & reranking
+sentence-transformers>=2.2.2
+torch>=2.0.0
+transformers>=4.40.0
+
+# Vector store
+pinecone>=7.0.0
+
+# LangChain
+langchain-core>=0.2.0
+langchain-community>=0.2.0
+langchain-google-genai>=1.0.0
+langchain-pinecone>=0.1.0
+langchain-huggingface>=0.1.0
+langchain-text-splitters>=0.2.0
+langgraph>=0.1.0
