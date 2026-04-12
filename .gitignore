@@ -35,6 +35,8 @@ build/
 .env.local
 .env.*.local
 .envrc
+*firebase-adminsdk*.json
+backend/*firebase-adminsdk*.json
 
 # =============================================================================
 # Testing & type checking

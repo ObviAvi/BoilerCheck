@@ -15,7 +15,7 @@ User question
      │
      ├─ 1. Embed query          HuggingFace all-MiniLM-L6-v2 (384-dim)
      │
-     ├─ 2. Vector search        Pinecone → top 8 candidate chunks
+    ├─ 2. Vector search        Pinecone → top candidate text/image chunks
      │
      ├─ 3. Rerank               Cross-encoder ms-marco-MiniLM-L-6-v2 → top 4
      │
@@ -24,7 +24,7 @@ User question
      └─ 5. Return { answer, documents[] } → rendered in UI with source cards
 ```
 
-Policy documents are pre-chunked at the subsection level and indexed into Pinecone with `ingest.py`. The live query path never touches the raw JSON — everything comes from the vector index.
+Policy records are read from Firestore, converted into text and image-description chunks, and indexed into Pinecone with `ingest.py`. The live query path never touches Firestore directly — everything comes from the vector index.
 
 ## Project structure
 
@@ -37,7 +37,7 @@ BoilerCheck/
 │   ├── requirements.txt Python dependencies
 │   └── .env             API keys (not committed)
 ├── data/
-│   └── rag_mock_data.json  Source policy documents (Purdue housing & dining)
+│   └── rag_mock_data.json  Legacy mock data (no longer used by default ingest path)
 ├── src/app/
 │   ├── page.js          Main UI — search input, answer panel, source cards
 │   ├── layout.js        Root layout
@@ -51,6 +51,7 @@ BoilerCheck/
 - Node.js 18+
 - A [Pinecone](https://app.pinecone.io) account (free Starter tier works)
 - A [Gemini API key](https://aistudio.google.com/app/apikey) (free tier works)
+- A Firebase Admin SDK service-account JSON key for your Firestore project
 
 ## Setup
 
@@ -79,6 +80,17 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 PINECONE_API_KEY=your_pinecone_api_key_here
 PINECONE_INDEX_NAME=your_pinecone_index_name_here
+
+# Optional retrieval tuning
+IMAGE_SCORE_THRESHOLD=0.35
+IMAGE_TOP_K=4
+RAG_CANDIDATE_K=16
+
+# Optional (defaults to policies_with_images)
+POLICIES_COLLECTION=policies_with_images
+
+# Optional if key file is not stored in backend/
+FIREBASE_SERVICE_ACCOUNT_PATH=C:\\path\\to\\firebase-adminsdk.json
 ```
 
 Create your Pinecone index with these settings:
@@ -88,14 +100,24 @@ Create your Pinecone index with these settings:
 
 ### 4. Ingest policy data into Pinecone
 
-Run this once to embed and upload all policy chunks:
+`backend/ingest.py` reads records from Firestore collection `policies_with_images`
+(or `POLICIES_COLLECTION` if set), then uploads text + image chunks.
+
+Download a Firebase Admin SDK JSON key (Firebase Console → Project settings →
+Service accounts → Generate new private key), then either:
+
+1. Place it in `backend/` with a filename containing `firebase-adminsdk`, or
+2. Set `FIREBASE_SERVICE_ACCOUNT_PATH` in your shell.
+
+Run this once to embed and upload all chunks:
 
 ```powershell
 # from backend/ with .venv active
+$env:FIREBASE_SERVICE_ACCOUNT_PATH="$PWD\your-firebase-adminsdk.json"
 python ingest.py
 ```
 
-This only needs to be re-run if `data/rag_mock_data.json` changes.
+This only needs to be re-run when Firestore policy records change.
 
 ### 5. Run the app
 
@@ -111,27 +133,39 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Adding more policy data
+## Firestore Record Schema (ingest)
 
-Add new documents to `data/rag_mock_data.json` following the existing schema, then re-run `python ingest.py`. The structure is:
+Each Firestore document in `policies_with_images` should follow this shape:
 
 ```json
 {
   "document_id": "unique_id",
-  "title": "Document Title",
-  "domain": "housing",
-  "url": "https://...",
+  "title": "Optional document title",
+  "domain": "purdue.edu",
+  "url": "Optional canonical page URL",
   "effective_date": "YYYY-MM-DD",
+  "has_structure": true,
+  "images": [
+    {
+      "description": "Text used for image retrieval",
+      "source_url": "https://...",
+      "filename": "...",
+      "format": "svg",
+      "image_type": "...",
+      "md5": "...",
+      "width": 0,
+      "height": 0
+    }
+  ],
   "sections": [
     {
       "section_title": "Section Name",
-      "subsections": [
-        {
-          "section_title": "Subsection Name",
-          "text": "The policy text that gets embedded and retrieved."
-        }
-      ]
+      "text": "The policy text that gets embedded and retrieved."
     }
   ]
 }
 ```
+
+Image descriptions and section text are indexed as separate entries. At query
+time, images are only returned if their rerank similarity score meets
+`IMAGE_SCORE_THRESHOLD`.

@@ -5,3 +5,44 @@ body {
   margin: 0;
   padding: 0;
 }
+
+/* Outer source card: light motion only so inner sections can fade independently */
+@keyframes source-card-shell {
+  from {
+    transform: translateY(10px);
+    opacity: 0.85;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.source-card-enter {
+  animation: source-card-shell 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes source-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.source-section-enter {
+  opacity: 0;
+  animation: source-section-enter 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .source-card-enter,
+  .source-section-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

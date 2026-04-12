@@ -5,6 +5,7 @@ pydantic>=2.0.0
 
 # Environment
 python-dotenv>=1.0.0
+firebase-admin>=6.5.0
 
 # Embeddings & reranking
 sentence-transformers>=2.2.2
