@@ -11,7 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from scrap import scrap_3
 from firebase import firebase_write
-from crawler import classify_images
+from BoilerCheck.scraper.crawler import classify_images
 from dotenv import load_dotenv
 
 load_dotenv()
