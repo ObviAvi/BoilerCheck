@@ -11,7 +11,7 @@ def _project_root() -> str:
 
 def _initialize_firestore_client():
     key_path = os.path.join(
-        _project_root(), "gdg-web-scraping-data-firebase-adminsdk-fbsvc-3b2210d133.json"
+        _project_root(), "gdg-web-scraping-data-firebase-adminsdk-fbsvc-d515cca4af.json"
     )
     cred = credentials.Certificate(key_path)
 
@@ -52,7 +52,26 @@ def upload_scraped_policy(scraped_data: Dict, skip_if_exists: bool = True) -> bo
     payload = dict(scraped_data)
     payload["last_updated"] = firestore.SERVER_TIMESTAMP
 
-    # merge=True allows updates for changed fields if skip_if_exists=False.
     doc_ref.set(payload, merge=True)
     print(f"Successfully uploaded/updated: {doc_id}")
+    return True
+
+"uploads the scraped policy with image description to firebase to a new collection"
+"called policies_with_images"
+
+def upload_scraped_policy_with_images(scraped_data: Dict, skip_if_exists: bool = True) -> bool:
+    """Upload to policies_with_images collection. Returns True if written, False if skipped."""
+    doc_id = scraped_data.get("document_id")
+    if not doc_id:
+        raise ValueError("scraped_data must include 'document_id'")
+
+    doc_ref = db.collection("policies_with_images").document(doc_id)
+    if skip_if_exists and doc_ref.get().exists:
+        return False
+
+    payload = dict(scraped_data)
+    payload["last_updated"] = firestore.SERVER_TIMESTAMP
+
+    doc_ref.set(payload, merge=True)
+    print(f"Successfully uploaded to policies_with_images: {doc_id}")
     return True
