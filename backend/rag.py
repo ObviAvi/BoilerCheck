@@ -10,6 +10,7 @@ Can also be run directly as a CLI:
 
 import os
 import sys
+import math
 from collections import defaultdict
 from typing import Iterator
 
@@ -45,6 +46,16 @@ def _safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalized_score(value: float) -> float:
+    """Map cross-encoder logits to a 0-1 display score via sigmoid."""
+    x = _safe_float(value)
+    if x >= 0:
+        z = math.exp(-x)
+        return 1.0 / (1.0 + z)
+    z = math.exp(x)
+    return z / (1.0 + z)
 
 
 def _print_ranking(original_docs, scores, top_n: int) -> None:
@@ -176,7 +187,7 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
                 "public_url": md.get("image_public_url", ""),
                 "width": int(md.get("image_width", 0) or 0),
                 "height": int(md.get("image_height", 0) or 0),
-                "score": round(_safe_float(score), 4),
+                "score": round(_normalized_score(score), 4),
             }
 
             dedupe_key = (
@@ -198,7 +209,11 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
             or md.get("source_key", "")
         )
         docs_by_id[doc_key]["sections"].append(
-            {"section_title": section_title, "text": d.page_content}
+            {
+                "section_title": section_title,
+                "text": d.page_content,
+                "score": round(_normalized_score(score), 4),
+            }
         )
 
     documents = []

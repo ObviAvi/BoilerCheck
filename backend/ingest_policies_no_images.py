@@ -1,13 +1,16 @@
 """
-Ingestion script for BoilerCheck.
+Ingestion script for BoilerCheck policies (text only).
 
-Reads Firestore collection `policies_with_images`, creates one vector entry
-per text section and one vector entry per image description, embeds with
-all-MiniLM-L6-v2, and upserts into Pinecone.
+Reads Firestore collection `policies`, creates one vector entry per text
+section, embeds with all-MiniLM-L6-v2, and upserts into Pinecone.
 
-Run once (or whenever the source data changes):
-    python ingest.py
+This script intentionally ignores images and focuses on the text-only schema.
+
+Run:
+    python ingest_policies_no_images.py
 """
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -17,10 +20,13 @@ from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
-COLLECTION_NAME = os.getenv("POLICIES_COLLECTION", "policies_with_images")
+COLLECTION_NAME = os.getenv("POLICIES_TEXT_COLLECTION", "policies")
+CHUNK_SIZE = int(os.getenv("POLICIES_TEXT_CHUNK_SIZE", "1200"))
+CHUNK_OVERLAP = int(os.getenv("POLICIES_TEXT_CHUNK_OVERLAP", "150"))
 
 
 def _backend_root() -> Path:
@@ -41,9 +47,6 @@ def _firebase_key_path() -> str | None:
 
 
 def _initialize_firestore_client():
-    """
-    Initialize Firestore using a Firebase Admin service-account JSON key.
-    """
     key_path = _firebase_key_path()
     if not key_path:
         raise RuntimeError(
@@ -85,102 +88,86 @@ def _safe_int(value) -> int:
         return 0
 
 
+def _safe_bool(value) -> bool:
+    return bool(value)
+
+
+def _safe_timestamp(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return _safe_str(value)
+    return _safe_str(value)
+
+
 def _base_meta(record: dict) -> dict:
     doc_id = _safe_str(record.get("document_id")) or _safe_str(record.get("id"))
     title = _safe_str(record.get("title")) or doc_id or "Untitled Source"
-    images = record.get("images") if isinstance(record.get("images"), list) else []
-    first_image_url = ""
-    for image in images:
-        if not isinstance(image, dict):
-            continue
-        first_image_url = _safe_str(image.get("source_url"))
-        if first_image_url:
-            break
 
     return {
         "document_id": doc_id,
         "title": title,
+        "category": _safe_str(record.get("category")),
         "domain": _safe_str(record.get("domain")),
-        "url": _safe_str(record.get("url")) or first_image_url,
+        "url": _safe_str(record.get("url")),
         "effective_date": _safe_str(record.get("effective_date")),
-        "has_structure": bool(record.get("has_structure", False)),
+        "has_structure": _safe_bool(record.get("has_structure", False)),
         "last_revised": _safe_str(record.get("last_revised")),
+        "last_updated": _safe_timestamp(record.get("last_updated")),
+        "relevant": _safe_bool(record.get("relevant", False)),
+        "score": _safe_int(record.get("score", 0)),
     }
 
 
 def _build_text_chunks(record: dict, base_meta: dict) -> list[Document]:
     chunks: list[Document] = []
     sections = record.get("sections") if isinstance(record.get("sections"), list) else []
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+    )
 
     for idx, section in enumerate(sections):
         if not isinstance(section, dict):
             continue
+
         text = _safe_str(section.get("text"))
         if not text:
             continue
 
         section_title = _safe_str(section.get("section_title")) or f"Section {idx + 1}"
-        chunks.append(
-            Document(
-                page_content=text,
-                metadata={
-                    **base_meta,
-                    "chunk_type": "text",
-                    "section_title": section_title,
-                    "subsection_title": "",
-                    "source_key": section_title,
-                },
+        text_parts = splitter.split_text(text)
+        for part_idx, part in enumerate(text_parts):
+            if not part.strip():
+                continue
+
+            is_multi_part = len(text_parts) > 1
+            source_key = section_title
+            if is_multi_part:
+                source_key = f"{section_title} (part {part_idx + 1}/{len(text_parts)})"
+
+            chunks.append(
+                Document(
+                    page_content=part,
+                    metadata={
+                        **base_meta,
+                        "chunk_type": "text",
+                        "section_title": section_title,
+                        "subsection_title": "",
+                        "source_key": source_key,
+                        "chunk_index": part_idx,
+                        "chunk_total": len(text_parts),
+                    },
+                )
             )
-        )
-
-    return chunks
-
-
-def _build_image_chunks(record: dict, base_meta: dict) -> list[Document]:
-    chunks: list[Document] = []
-    images = record.get("images") if isinstance(record.get("images"), list) else []
-
-    for idx, image in enumerate(images):
-        if not isinstance(image, dict):
-            continue
-
-        description = _safe_str(image.get("description"))
-        source_url = _safe_str(image.get("source_url"))
-        if not description:
-            continue
-
-        filename = _safe_str(image.get("filename"))
-        image_label = filename or f"image_{idx + 1}"
-        chunks.append(
-            Document(
-                page_content=description,
-                metadata={
-                    **base_meta,
-                    "chunk_type": "image",
-                    "section_title": "Image",
-                    "subsection_title": image_label,
-                    "source_key": f"Image/{image_label}",
-                    "image_description": description,
-                    "image_source_url": source_url,
-                    "image_filename": filename,
-                    "image_format": _safe_str(image.get("format")),
-                    "image_type": _safe_str(image.get("image_type")),
-                    "image_md5": _safe_str(image.get("md5")),
-                    "image_width": _safe_int(image.get("width", 0)),
-                    "image_height": _safe_int(image.get("height", 0)),
-                    "image_public_url": _safe_str(image.get("public_url")),
-                },
-            )
-        )
 
     return chunks
 
 
 def load_chunks_from_firestore() -> list[Document]:
-    """
-    Build one vector entry per text section and one per image description from
-    Firestore records in the configured collection.
-    """
     db = _initialize_firestore_client()
     chunks: list[Document] = []
 
@@ -194,12 +181,11 @@ def load_chunks_from_firestore() -> list[Document]:
 
         base_meta = _base_meta(record)
         chunks.extend(_build_text_chunks(record, base_meta))
-        chunks.extend(_build_image_chunks(record, base_meta))
 
     return chunks
 
 
-def main():
+def main() -> None:
     index_name = os.getenv("PINECONE_INDEX_NAME")
     if not index_name:
         raise RuntimeError("PINECONE_INDEX_NAME is not set in .env")
@@ -207,10 +193,9 @@ def main():
     print(f"Loading data from Firestore collection '{COLLECTION_NAME}' ...")
     chunks = load_chunks_from_firestore()
     text_count = sum(1 for c in chunks if (c.metadata or {}).get("chunk_type") == "text")
-    image_count = sum(1 for c in chunks if (c.metadata or {}).get("chunk_type") == "image")
+
     print(f"  {len(chunks)} total chunks ready to upsert")
     print(f"  text chunks: {text_count}")
-    print(f"  image chunks: {image_count}")
 
     if not chunks:
         raise RuntimeError("No chunks were produced from Firestore data.")
@@ -227,7 +212,7 @@ def main():
         text_key="text",
     )
 
-    print(f"Done — {len(chunks)} chunks indexed.")
+    print(f"Done - {len(chunks)} text chunks indexed.")
 
 
 if __name__ == "__main__":
