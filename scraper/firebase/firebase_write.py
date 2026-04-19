@@ -56,3 +56,17 @@ def upload_scraped_policy(scraped_data: Dict, skip_if_exists: bool = True) -> bo
     doc_ref.set(payload, merge=True)
     print(f"Successfully uploaded/updated: {doc_id}")
     return True
+
+def upload_scraped_policy_with_images(scraped_data: Dict, skip_if_exists: bool = True) -> bool:
+    """Upload policy document with images to a separate collection."""
+    doc_id = scraped_data.get("document_id")
+    if not doc_id:
+        raise ValueError("scraped_data must include 'document_id'")
+    doc_ref = db.collection("policies_with_images").document(doc_id)
+    if skip_if_exists and doc_ref.get().exists:
+        return False
+    payload = dict(scraped_data)
+    payload["last_updated"] = firestore.SERVER_TIMESTAMP
+    doc_ref.set(payload, merge=True)
+    print(f"Successfully uploaded with images: {doc_id}")
+    return True
