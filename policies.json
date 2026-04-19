@@ -1,0 +1,11 @@
+{
+    "summary": {
+        "total_crawled": 0,
+        "relevant_count": 0,
+        "irrelevant_count": 0,
+        "firebase_uploaded": 0,
+        "firebase_duplicates_skipped": 0
+    },
+    "relevant_pages": [],
+    "irrelevant_pages": []
+}

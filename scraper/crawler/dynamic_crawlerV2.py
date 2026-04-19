@@ -9,9 +9,9 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from scrap import scrap_3
+from scrape.scrape_3 import scrape_policy_page_final
 from firebase import firebase_write
-from BoilerCheck.scraper.crawler import classify_images
+from crawler import classify_images
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -205,7 +205,7 @@ def crawler(starter_url: str, max_pages: int = 10):
             soup = BeautifulSoup(r.content, 'html.parser')
 
             # ── Scrape text + score ──────────────────────────────
-            page_data = scrap_3.scrape_policy_page_final(url)
+            page_data = scrape_policy_page_final(url)
             page_data["document_id"] = make_document_id(page_data["url"])
 
             # ── Extract images (raw, no classification yet) ──────
@@ -291,5 +291,5 @@ def crawler(starter_url: str, max_pages: int = 10):
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
-starter_url = "https://catalog.purdue.edu/content.php?catoid=15&navoid=18634"
+starter_url = "https://catalog.purdue.edu/"
 crawler(starter_url, max_pages=50)
