@@ -71,3 +71,5 @@ desktop.ini
 # Scraper
 # =============================================================================
 scrap/.venv
+/images/
+scraper/images/
