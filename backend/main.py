@@ -34,6 +34,16 @@ class AskRequest(BaseModel):
     query: str
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "BoilerCheck API"}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "healthy"}
+
+
 @app.post("/ask")
 def ask(body: AskRequest):
     if not body.query.strip():

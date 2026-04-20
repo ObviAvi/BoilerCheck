@@ -11,6 +11,7 @@ Can also be run directly as a CLI:
 import os
 import sys
 import math
+from functools import lru_cache
 from collections import defaultdict
 from typing import Iterator
 
@@ -23,12 +24,26 @@ from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
-# Load once at import time so every request reuses the same in-memory models
-_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-_cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 _IMAGE_SCORE_THRESHOLD = float(os.getenv("IMAGE_SCORE_THRESHOLD", "0.35"))
 _IMAGE_TOP_K = int(os.getenv("IMAGE_TOP_K", "4"))
 _CANDIDATE_K = int(os.getenv("RAG_CANDIDATE_K", "16"))
+
+
+def _required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} is not set.")
+    return value
+
+
+@lru_cache(maxsize=1)
+def _get_embeddings() -> HuggingFaceEmbeddings:
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+
+@lru_cache(maxsize=1)
+def _get_cross_encoder() -> CrossEncoder:
+    return CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 
 def _doc_label(d) -> str:
@@ -110,14 +125,13 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
     Returns:
         (context, documents) in the same shape as the /ask JSON payload.
     """
-    index_name = os.getenv("PINECONE_INDEX_NAME")
-    if not index_name:
-        raise RuntimeError("PINECONE_INDEX_NAME is not set in .env")
+    index_name = _required_env("PINECONE_INDEX_NAME")
+    pinecone_api_key = _required_env("PINECONE_API_KEY")
 
     vectorstore = PineconeVectorStore(
         index_name=index_name,
-        embedding=_embeddings,
-        pinecone_api_key=os.getenv("PINECONE_API_KEY"),
+        embedding=_get_embeddings(),
+        pinecone_api_key=pinecone_api_key,
         text_key="text",
     )
 
@@ -127,7 +141,7 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
         return "", []
 
     pairs = [[question, d.page_content] for d in candidates]
-    scores = _cross_encoder.predict(pairs)
+    scores = _get_cross_encoder().predict(pairs)
 
     if debug:
         _print_ranking(candidates, scores, top_n=top_k)
@@ -262,7 +276,7 @@ def query(question: str, top_k: int = 4, debug: bool = False) -> dict:
     context, documents = retrieve(question, top_k=top_k, debug=debug)
 
     llm = ChatGoogleGenerativeAI(
-        google_api_key=os.getenv("GEMINI_API_KEY"),
+        google_api_key=_required_env("GEMINI_API_KEY"),
         model="gemini-2.5-flash",
         temperature=0,
     )
@@ -285,7 +299,7 @@ def stream_rag_events(question: str, top_k: int = 4, debug: bool = False) -> Ite
     yield {"type": "documents", "documents": documents}
 
     llm = ChatGoogleGenerativeAI(
-        google_api_key=os.getenv("GEMINI_API_KEY"),
+        google_api_key=_required_env("GEMINI_API_KEY"),
         model="gemini-2.5-flash-lite",
         temperature=0,
         streaming=True,
