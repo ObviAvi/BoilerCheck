@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+backend/.venv
+scraper/images
+scraper/crawler/data/images
+__pycache__
+*.pyc
+.env
+backend/.env

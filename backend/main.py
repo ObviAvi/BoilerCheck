@@ -1,4 +1,5 @@
 import json
+import os
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -11,9 +12,18 @@ from rag import stream_rag_events
 
 app = FastAPI(title="BoilerCheck API")
 
+
+def _parse_cors_origins() -> list[str]:
+    raw_origins = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,https://boiler-check.vercel.app",
+    )
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    return origins or ["http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_parse_cors_origins(),
     allow_credentials=False,
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["Content-Type"],

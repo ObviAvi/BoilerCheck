@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 export default function Home() {
+  const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
   const [query, setQuery] = useState("");
   /** null = retrieval not finished yet; array = ready to render (maybe empty) */
   const [documents, setDocuments] = useState(null);
@@ -83,7 +84,7 @@ export default function Home() {
     setError("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/ask/stream", {
+      const res = await fetch(`${apiBaseUrl}/ask/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
@@ -146,7 +147,10 @@ export default function Home() {
       console.error("Failed to fetch backend response:", err);
       setDocuments(null);
       setStreamingAnswer("");
-      setError(err.message || "Could not connect to backend. Make sure FastAPI is running on port 8000.");
+      setError(
+        err.message ||
+          "Could not connect to backend. Check NEXT_PUBLIC_API_BASE_URL (or local FastAPI on port 8000)."
+      );
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
       setLoading(false);
