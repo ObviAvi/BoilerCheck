@@ -1,16 +1,21 @@
 """
 Core RAG pipeline for BoilerCheck.
 
-Retrieves relevant Purdue policy chunks from Pinecone, reranks them with a
-cross-encoder, then generates a grounded answer via the Gemini API.
+Retrieves relevant Purdue policy chunks from Pinecone and generates a
+grounded answer via the Gemini API.
+
+No reranking: benchmarks showed MiniLM cosine search already achieves 90%
+hit rate and 0.875 MRR@4. Cross-encoder reranking showed 0% improvement in
+both hit rate and MRR. LLM-based reranking (RankLLM-Gemini) improved MRR to
+1.0 but adds ~6.5s latency per query, not justified for this use case.
+See benchmark/README.md for full analysis.
 
 Can also be run directly as a CLI:
-    python rag.py "your question here" [--debug]
+    python rag.py "your question here"
 """
 
 import os
 import sys
-import math
 from collections import defaultdict
 from typing import Iterator
 
@@ -19,65 +24,64 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
-from sentence_transformers import CrossEncoder
 
 load_dotenv()
 
-# Load once at import time so every request reuses the same in-memory models
+# Load once at import time so every request reuses the same in-memory model
 _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-_cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 _IMAGE_SCORE_THRESHOLD = float(os.getenv("IMAGE_SCORE_THRESHOLD", "0.35"))
 _IMAGE_TOP_K = int(os.getenv("IMAGE_TOP_K", "4"))
-_CANDIDATE_K = int(os.getenv("RAG_CANDIDATE_K", "16"))
+_RETRIEVE_K = int(os.getenv("RAG_RETRIEVE_K", "8"))
 
 
-def _doc_label(d) -> str:
-    md = d.metadata or {}
-    key = md.get("source_key", "")
-    return key if key else d.page_content[:60] + "..."
+# --- Cross-encoder helpers (commented out — no reranking, see benchmark/README.md) ---
+# def _doc_label(d) -> str:
+#     md = d.metadata or {}
+#     key = md.get("source_key", "")
+#     return key if key else d.page_content[:60] + "..."
+#
+#
+# def _safe_float(value, default: float = 0.0) -> float:
+#     try:
+#         return float(value)
+#     except (TypeError, ValueError):
+#         return default
+#
+#
+# def _normalized_score(value: float) -> float:
+#     """Map cross-encoder logits to a 0-1 display score via sigmoid."""
+#     x = _safe_float(value)
+#     if x >= 0:
+#         z = math.exp(-x)
+#         return 1.0 / (1.0 + z)
+#     z = math.exp(x)
+#     return z / (1.0 + z)
+#
+#
+# def _print_ranking(original_docs, scores, top_n: int) -> None:
+#     ranked = sorted(
+#         zip(scores, range(len(original_docs)), original_docs),
+#         key=lambda x: x[0],
+#         reverse=True,
+#     )
+#     print("\n" + "=" * 75)
+#     print("RANKING: Vector Search  →  Cross-Encoder Rerank")
+#     print("=" * 75)
+#     print(f"\n{'Rerank #':<10} {'Vector #':<10} {'Score':<10} {'Status':<12} Source")
+#     print("-" * 75)
+#     for new_rank, (score, orig_idx, d) in enumerate(ranked, 1):
+#         kept = new_rank <= top_n
+#         status = "KEPT" if kept else "FILTERED"
+#         label = _doc_label(d)
+#         line = f"  {new_rank:<8} {orig_idx + 1:<10} {score:<10.4f} {status:<12} {label}"
+#         if not kept:
+#             line = f"\033[90m{line}\033[0m"
+#         print(line)
+#     print()
 
 
 def _is_image_chunk(d) -> bool:
     return (d.metadata or {}).get("chunk_type") == "image"
-
-
-def _safe_float(value, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _normalized_score(value: float) -> float:
-    """Map cross-encoder logits to a 0-1 display score via sigmoid."""
-    x = _safe_float(value)
-    if x >= 0:
-        z = math.exp(-x)
-        return 1.0 / (1.0 + z)
-    z = math.exp(x)
-    return z / (1.0 + z)
-
-
-def _print_ranking(original_docs, scores, top_n: int) -> None:
-    ranked = sorted(
-        zip(scores, range(len(original_docs)), original_docs),
-        key=lambda x: x[0],
-        reverse=True,
-    )
-    print("\n" + "=" * 75)
-    print("RANKING: Vector Search  →  Cross-Encoder Rerank")
-    print("=" * 75)
-    print(f"\n{'Rerank #':<10} {'Vector #':<10} {'Score':<10} {'Status':<12} Source")
-    print("-" * 75)
-    for new_rank, (score, orig_idx, d) in enumerate(ranked, 1):
-        kept = new_rank <= top_n
-        status = "KEPT" if kept else "FILTERED"
-        label = _doc_label(d)
-        line = f"  {new_rank:<8} {orig_idx + 1:<10} {score:<10.4f} {status:<12} {label}"
-        if not kept:
-            line = f"\033[90m{line}\033[0m"
-        print(line)
-    print()
 
 
 _RAG_PROMPT = ChatPromptTemplate.from_messages(
@@ -103,9 +107,11 @@ _RAG_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
-def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, list]:
+def retrieve(question: str, top_k: int = 4) -> tuple[str, list]:
     """
-    Pinecone retrieval + rerank; build LLM context string and document cards.
+    Pinecone vector retrieval; build LLM context string and document cards.
+
+    Uses cosine similarity scores directly from Pinecone (no reranking).
 
     Returns:
         (context, documents) in the same shape as the /ask JSON payload.
@@ -121,22 +127,14 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
         text_key="text",
     )
 
-    candidates = vectorstore.as_retriever(search_kwargs={"k": _CANDIDATE_K}).invoke(question)
+    results = vectorstore.similarity_search_with_relevance_scores(question, k=_RETRIEVE_K)
 
-    if not candidates:
+    if not results:
         return "", []
-
-    pairs = [[question, d.page_content] for d in candidates]
-    scores = _cross_encoder.predict(pairs)
-
-    if debug:
-        _print_ranking(candidates, scores, top_n=top_k)
-
-    ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
 
     top_text = []
     passing_images = []
-    for score, d in ranked:
+    for d, score in results:
         if _is_image_chunk(d):
             if score >= _IMAGE_SCORE_THRESHOLD:
                 passing_images.append((score, d))
@@ -145,13 +143,11 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
         if len(top_text) < top_k:
             top_text.append((score, d))
 
-    if not top_text and ranked:
-        # Fallback for older indexes without chunk_type metadata.
-        top_text = [(score, d) for score, d in ranked[:top_k]]
+    if not top_text and results:
+        top_text = [(score, d) for d, score in results[:top_k]]
 
     selected_images = passing_images[:_IMAGE_TOP_K]
     selected = top_text + selected_images
-    docs = [d for _, d in selected]
 
     context_parts = []
     for i, (score, d) in enumerate(selected, 1):
@@ -187,7 +183,7 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
                 "public_url": md.get("image_public_url", ""),
                 "width": int(md.get("image_width", 0) or 0),
                 "height": int(md.get("image_height", 0) or 0),
-                "score": round(_normalized_score(score), 4),
+                "score": round(score, 4),
             }
 
             dedupe_key = (
@@ -212,7 +208,7 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
             {
                 "section_title": section_title,
                 "text": d.page_content,
-                "score": round(_normalized_score(score), 4),
+                "score": round(score, 4),
             }
         )
 
@@ -239,7 +235,7 @@ def retrieve(question: str, top_k: int = 4, debug: bool = False) -> tuple[str, l
     return context, documents
 
 
-def query(question: str, top_k: int = 4, debug: bool = False) -> dict:
+def query(question: str, top_k: int = 4) -> dict:
     """
     Run the full RAG pipeline and return a structured response.
 
@@ -259,7 +255,7 @@ def query(question: str, top_k: int = 4, debug: bool = False) -> dict:
             ]
         }
     """
-    context, documents = retrieve(question, top_k=top_k, debug=debug)
+    context, documents = retrieve(question, top_k=top_k)
 
     llm = ChatGoogleGenerativeAI(
         google_api_key=os.getenv("GEMINI_API_KEY"),
@@ -272,7 +268,7 @@ def query(question: str, top_k: int = 4, debug: bool = False) -> dict:
     return {"answer": response.content, "documents": documents}
 
 
-def stream_rag_events(question: str, top_k: int = 4, debug: bool = False) -> Iterator[dict]:
+def stream_rag_events(question: str, top_k: int = 4) -> Iterator[dict]:
     """
     Yields events for SSE: documents first, then token chunks, then done.
 
@@ -281,7 +277,7 @@ def stream_rag_events(question: str, top_k: int = 4, debug: bool = False) -> Ite
         {"type": "token", "text": str}
         {"type": "done"}
     """
-    context, documents = retrieve(question, top_k=top_k, debug=debug)
+    context, documents = retrieve(question, top_k=top_k)
     yield {"type": "documents", "documents": documents}
 
     llm = ChatGoogleGenerativeAI(
@@ -310,12 +306,11 @@ def stream_rag_events(question: str, top_k: int = 4, debug: bool = False) -> Ite
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print('Usage: python rag.py "your question here" [--debug]')
+        print('Usage: python rag.py "your question here"')
         raise SystemExit(1)
 
-    show_debug = "--debug" in sys.argv
-    user_question = next(a for a in sys.argv[1:] if a != "--debug")
-    result = query(user_question, debug=show_debug)
+    user_question = sys.argv[1]
+    result = query(user_question)
 
     print("\nANSWER:")
     print(result["answer"])

@@ -1,0 +1,302 @@
+{
+  "embedding": "qwen3-embedding",
+  "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+  "reranker": "cross-encoder-minilm",
+  "reranker_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+  "settings": {
+    "retrieve_k": 8,
+    "rerank_top_k": 4
+  },
+  "aggregate_metrics": {
+    "hit_rate@k": 0.9,
+    "mrr@k": 0.875,
+    "ndcg@k": 0.8459860394574094,
+    "context_precision@k": 0.275,
+    "avg_latency_ms": 545.02,
+    "total_latency_ms": 10900.35,
+    "embed_doc_time_s": 1142.14
+  },
+  "per_query": [
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 3963.13,
+      "query": "What are the quiet hours in the dorms?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__quiet-and-courtesy-hours",
+        "housing_policy_2025__student-conduct-policies__security",
+        "housing_policy_2025__student-conduct-policies__guest-hours",
+        "housing_policy_2025__safety__walking-on-campus"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 174.92,
+      "query": "Can I have a pet in my dorm room?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__pets",
+        "housing_policy_2025__student-conduct-policies__corridors",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications",
+        "housing_policy_2025__student-conduct-policies__unauthorized-access-or-use"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 688.74,
+      "query": "What happens if I get caught with alcohol in the dorms?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__alcohol",
+        "housing_policy_2025__safety__in-the-residences",
+        "housing_policy_2025__hall-facility-information__bulletin-boards",
+        "housing_policy_2025__student-conduct-policies__drugs"
+      ]
+    },
+    {
+      "hit_rate@k": 0.0,
+      "mrr@k": 0.0,
+      "ndcg@k": 0.0,
+      "context_precision@k": 0.0,
+      "latency_ms": 763.96,
+      "query": "How much does the unlimited meal plan cost?",
+      "retrieved_ids": [
+        "purdue_dining_meal_plans__10-track-plan",
+        "purdue_dining_meal_plans__50-block-plan",
+        "purdue_dining_meal_plans__80-block-plan",
+        "purdue_dining_meal_plans__14-track-plan"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.5,
+      "latency_ms": 126.96,
+      "query": "What appliances can I use in my dorm room?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__room-appliances-and-furnishings",
+        "housing_policy_2025__safety__items-prohibited",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications",
+        "housing_policy_2025__room-and-apartment-information__items-provided-by-university-residences"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 0.5,
+      "ndcg@k": 0.38685280723454163,
+      "context_precision@k": 0.25,
+      "latency_ms": 770.62,
+      "query": "What should I do during a tornado warning on campus?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__emergency-procedures",
+        "housing_policy_2025__emergency-procedures__tornado-warning",
+        "housing_policy_2025__emergency-services__bomb-threats",
+        "housing_policy_2025__safety__walking-on-campus"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 926.08,
+      "query": "Can freshmen park on campus?",
+      "retrieved_ids": [
+        "housing_policy_2025__transportation__parking",
+        "housing_policy_2025__transportation__bus-service",
+        "purdue_dining_meal_plans__overview",
+        "housing_policy_2025__student-conduct-policies__harassment"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 784.74,
+      "query": "How many overnight guests can I have and for how long?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__guests-overnight",
+        "housing_policy_2025__student-conduct-policies__guest-hours",
+        "housing_policy_2025__transportation__parking",
+        "housing_policy_2025__room-and-apartment-information__general-information"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 94.05,
+      "query": "What meal plan has the most dining dollars?",
+      "retrieved_ids": [
+        "purdue_dining_meal_plans__10-track-plan",
+        "purdue_dining_meal_plans__overview",
+        "purdue_dining_meal_plans__14-track-plan",
+        "purdue_dining_meal_plans__7-track-plan"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 756.66,
+      "query": "Are candles allowed in the dorms?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__candles-and-incense",
+        "housing_policy_2025__safety__items-prohibited",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications",
+        "housing_policy_2025__student-conduct-policies__corridors"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 0.6131471927654584,
+      "context_precision@k": 0.25,
+      "latency_ms": 132.76,
+      "query": "How do I report a crime on campus?",
+      "retrieved_ids": [
+        "housing_policy_2025__safety__report-crimes-immediately",
+        "housing_policy_2025__emergency-services__reporting-sexual-crimes",
+        "housing_policy_2025__safety__reporting-sexual-crimes",
+        "housing_policy_2025__safety__general-information"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 92.31,
+      "query": "What are the guest visitation hours?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__guest-hours",
+        "housing_policy_2025__student-conduct-policies__guests-overnight",
+        "housing_policy_2025__student-conduct-policies__quiet-and-courtesy-hours",
+        "housing_policy_2025__safety__access-clerk"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 65.2,
+      "query": "Where can I use my meal swipes?",
+      "retrieved_ids": [
+        "purdue_dining_meal_plans__overview",
+        "purdue_dining_meal_plans__50-block-plan",
+        "purdue_dining_meal_plans__80-block-plan",
+        "purdue_dining_meal_plans__10-track-plan"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.5,
+      "latency_ms": 82.5,
+      "query": "What do I do if I lose my room key?",
+      "retrieved_ids": [
+        "housing_policy_2025__room-and-apartment-information__keys",
+        "housing_policy_2025__safety__keep-your-key-puid",
+        "housing_policy_2025__emergency-procedures__unauthorized-group-action",
+        "housing_policy_2025__safety__lock-doors"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 0.9197207891481876,
+      "context_precision@k": 0.5,
+      "latency_ms": 103.45,
+      "query": "Can I use an air fryer in my dorm?",
+      "retrieved_ids": [
+        "housing_policy_2025__safety__items-prohibited",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications",
+        "housing_policy_2025__student-conduct-policies__room-appliances-and-furnishings",
+        "housing_policy_2025__student-conduct-policies__smoking-vaping"
+      ]
+    },
+    {
+      "hit_rate@k": 0.0,
+      "mrr@k": 0.0,
+      "ndcg@k": 0.0,
+      "context_precision@k": 0.0,
+      "latency_ms": 59.61,
+      "query": "What is the cheapest meal plan available?",
+      "retrieved_ids": [
+        "purdue_dining_meal_plans__10-track-plan",
+        "purdue_dining_meal_plans__indianapolis-students-dining-options",
+        "purdue_dining_meal_plans__overview",
+        "purdue_dining_meal_plans__80-block-plan"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.5,
+      "latency_ms": 112.46,
+      "query": "How do I get a security escort at night?",
+      "retrieved_ids": [
+        "housing_policy_2025__safety__walking-on-campus",
+        "housing_policy_2025__transportation__walking",
+        "housing_policy_2025__safety__confront-strangers",
+        "housing_policy_2025__emergency-services__tornado"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 123.94,
+      "query": "What furniture does the university provide in dorm rooms?",
+      "retrieved_ids": [
+        "housing_policy_2025__room-and-apartment-information__items-provided-by-university-residences",
+        "housing_policy_2025__hall-facility-information__recycling",
+        "housing_policy_2025__safety__items-prohibited",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 1007.23,
+      "query": "Are weapons allowed in university housing?",
+      "retrieved_ids": [
+        "housing_policy_2025__student-conduct-policies__weapons",
+        "housing_policy_2025__student-conduct-policies__recreational-equipment---items-prohibited",
+        "housing_policy_2025__safety__items-prohibited",
+        "housing_policy_2025__room-and-apartment-information__appliances-and-room-modifications"
+      ]
+    },
+    {
+      "hit_rate@k": 1.0,
+      "mrr@k": 1.0,
+      "ndcg@k": 1.0,
+      "context_precision@k": 0.25,
+      "latency_ms": 71.03,
+      "query": "Is there a meal plan for Indianapolis students?",
+      "retrieved_ids": [
+        "purdue_dining_meal_plans__indianapolis-students-dining-options",
+        "purdue_dining_meal_plans__overview",
+        "purdue_dining_meal_plans__meal-plan-policies",
+        "purdue_dining_meal_plans__10-track-plan"
+      ]
+    }
+  ],
+  "timestamp": "2026-04-15T21:23:10.461059"
+}
