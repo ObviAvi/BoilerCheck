@@ -1,0 +1,148 @@
+[
+  {
+    "query": "What are the quiet hours in the dorms?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__quiet-and-courtesy-hours"
+    ],
+    "expected_answer_keywords": ["10 p.m.", "8 a.m.", "Sunday", "Thursday", "Friday", "Saturday", "24-hour", "finals"]
+  },
+  {
+    "query": "Can I have a pet in my dorm room?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__pets"
+    ],
+    "expected_answer_keywords": ["fish"]
+  },
+  {
+    "query": "What happens if I get caught with alcohol in the dorms?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__alcohol"
+    ],
+    "expected_answer_keywords": ["prohibited", "parental", "education program", "termination", "housing contract"]
+  },
+  {
+    "query": "How much does the unlimited meal plan cost?",
+    "relevant_chunk_ids": [
+      "purdue_dining_meal_plans__unlimited-plan"
+    ],
+    "expected_answer_keywords": ["5,894", "2025-26"]
+  },
+  {
+    "query": "What appliances can I use in my dorm room?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__room-appliances-and-furnishings",
+      "housing_policy_2025__safety__items-prohibited"
+    ],
+    "expected_answer_keywords": ["coffee", "microwave", "1000 watts", "refrigerator", "4.0 cu ft"]
+  },
+  {
+    "query": "What should I do during a tornado warning on campus?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__emergency-procedures__tornado-warning",
+      "housing_policy_2025__emergency-services__tornado"
+    ],
+    "expected_answer_keywords": ["siren", "lower areas", "windows", "basement"]
+  },
+  {
+    "query": "Can freshmen park on campus?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__transportation__parking"
+    ],
+    "expected_answer_keywords": ["sophomores", "juniors", "seniors", "first year", "restricted", "medical", "employment"]
+  },
+  {
+    "query": "How many overnight guests can I have and for how long?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__guests-overnight"
+    ],
+    "expected_answer_keywords": ["three consecutive nights", "two guests"]
+  },
+  {
+    "query": "What meal plan has the most dining dollars?",
+    "relevant_chunk_ids": [
+      "purdue_dining_meal_plans__10-track-plan"
+    ],
+    "expected_answer_keywords": ["10-Track", "1,140", "highest"]
+  },
+  {
+    "query": "Are candles allowed in the dorms?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__candles-and-incense"
+    ],
+    "expected_answer_keywords": ["not permitted", "fire"]
+  },
+  {
+    "query": "How do I report a crime on campus?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__safety__report-crimes-immediately",
+      "housing_policy_2025__emergency-services__crime-and-violent-behavior"
+    ],
+    "expected_answer_keywords": ["Purdue University Police", "911"]
+  },
+  {
+    "query": "What are the guest visitation hours?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__guest-hours"
+    ],
+    "expected_answer_keywords": ["8 a.m.", "2 a.m.", "24-hour visitation", "Hillenbrand", "Hawkins"]
+  },
+  {
+    "query": "Where can I use my meal swipes?",
+    "relevant_chunk_ids": [
+      "purdue_dining_meal_plans__overview"
+    ],
+    "expected_answer_keywords": ["Earhart", "Ford", "Hillenbrand", "Wiley", "Windsor", "On-the-GO"]
+  },
+  {
+    "query": "What do I do if I lose my room key?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__room-and-apartment-information__keys",
+      "housing_policy_2025__safety__keep-your-key-puid"
+    ],
+    "expected_answer_keywords": ["report", "main office", "fee", "replacement"]
+  },
+  {
+    "query": "Can I use an air fryer in my dorm?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__safety__items-prohibited",
+      "housing_policy_2025__student-conduct-policies__room-appliances-and-furnishings"
+    ],
+    "expected_answer_keywords": ["prohibited", "air fryer"]
+  },
+  {
+    "query": "What is the cheapest meal plan available?",
+    "relevant_chunk_ids": [
+      "purdue_dining_meal_plans__50-block-plan"
+    ],
+    "expected_answer_keywords": ["50-Block", "1,760"]
+  },
+  {
+    "query": "How do I get a security escort at night?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__safety__walking-on-campus",
+      "housing_policy_2025__transportation__walking"
+    ],
+    "expected_answer_keywords": ["Student Security Patrol", "49-4SAFE", "494-7233", "Thursday", "Friday", "Saturday"]
+  },
+  {
+    "query": "What furniture does the university provide in dorm rooms?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__room-and-apartment-information__items-provided-by-university-residences"
+    ],
+    "expected_answer_keywords": ["bed", "mattress", "curtains", "smoke detector", "internet", "cable"]
+  },
+  {
+    "query": "Are weapons allowed in university housing?",
+    "relevant_chunk_ids": [
+      "housing_policy_2025__student-conduct-policies__weapons"
+    ],
+    "expected_answer_keywords": ["strictly prohibited", "handguns", "rifles", "terminated"]
+  },
+  {
+    "query": "Is there a meal plan for Indianapolis students?",
+    "relevant_chunk_ids": [
+      "purdue_dining_meal_plans__indianapolis-students-dining-options"
+    ],
+    "expected_answer_keywords": ["20-block", "258", "Indianapolis", "IU"]
+  }
+]
