@@ -564,18 +564,6 @@ export default function Home() {
                                 <div className="text-sm font-semibold">
                                   {section.section_title || "Untitled Section"}
                                 </div>
-                                {typeof section.score === "number" && (
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
-                                      darkMode
-                                        ? "border border-white/10 bg-white/5 text-zinc-200"
-                                        : "border border-black/10 bg-black/5 text-zinc-700"
-                                    }`}
-                                    title="Retrieval score"
-                                  >
-                                    {section.score.toFixed(2)}
-                                  </span>
-                                )}
                               </div>
                               {(() => {
                                 const rawText = section.text || "No text provided.";
@@ -666,18 +654,6 @@ export default function Home() {
                       <p className="text-sm font-semibold leading-6">{image.document_title}</p>
                       <div className="flex items-center justify-between gap-2">
                         <div className={`text-[11px] ${theme.faintText}`}>{image.filename || "image"}</div>
-                        {typeof image.score === "number" && (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
-                              darkMode
-                                ? "border border-white/10 bg-white/5 text-zinc-200"
-                                : "border border-black/10 bg-black/5 text-zinc-700"
-                            }`}
-                            title="Retrieval score"
-                          >
-                            {image.score.toFixed(2)}
-                          </span>
-                        )}
                       </div>
                     </div>
                   </a>
