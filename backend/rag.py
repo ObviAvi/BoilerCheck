@@ -17,6 +17,7 @@ Can also be run directly as a CLI:
 import os
 import sys
 from collections import defaultdict
+from pathlib import Path
 from typing import Iterator
 
 from dotenv import load_dotenv
@@ -25,59 +26,14 @@ from langchain_pinecone import PineconeVectorStore
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-load_dotenv()
+# .env lives in the BoilerCheck repo root (parents[1]).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-# Load once at import time so every request reuses the same in-memory model
+# Loaded once at import time so every request reuses the same in-memory model.
 _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 _IMAGE_SCORE_THRESHOLD = float(os.getenv("IMAGE_SCORE_THRESHOLD", "0.35"))
 _IMAGE_TOP_K = int(os.getenv("IMAGE_TOP_K", "4"))
 _RETRIEVE_K = int(os.getenv("RAG_RETRIEVE_K", "8"))
-
-
-# --- Cross-encoder helpers (commented out — no reranking, see benchmark/README.md) ---
-# def _doc_label(d) -> str:
-#     md = d.metadata or {}
-#     key = md.get("source_key", "")
-#     return key if key else d.page_content[:60] + "..."
-#
-#
-# def _safe_float(value, default: float = 0.0) -> float:
-#     try:
-#         return float(value)
-#     except (TypeError, ValueError):
-#         return default
-#
-#
-# def _normalized_score(value: float) -> float:
-#     """Map cross-encoder logits to a 0-1 display score via sigmoid."""
-#     x = _safe_float(value)
-#     if x >= 0:
-#         z = math.exp(-x)
-#         return 1.0 / (1.0 + z)
-#     z = math.exp(x)
-#     return z / (1.0 + z)
-#
-#
-# def _print_ranking(original_docs, scores, top_n: int) -> None:
-#     ranked = sorted(
-#         zip(scores, range(len(original_docs)), original_docs),
-#         key=lambda x: x[0],
-#         reverse=True,
-#     )
-#     print("\n" + "=" * 75)
-#     print("RANKING: Vector Search  →  Cross-Encoder Rerank")
-#     print("=" * 75)
-#     print(f"\n{'Rerank #':<10} {'Vector #':<10} {'Score':<10} {'Status':<12} Source")
-#     print("-" * 75)
-#     for new_rank, (score, orig_idx, d) in enumerate(ranked, 1):
-#         kept = new_rank <= top_n
-#         status = "KEPT" if kept else "FILTERED"
-#         label = _doc_label(d)
-#         line = f"  {new_rank:<8} {orig_idx + 1:<10} {score:<10.4f} {status:<12} {label}"
-#         if not kept:
-#             line = f"\033[90m{line}\033[0m"
-#         print(line)
-#     print()
 
 
 def _is_image_chunk(d) -> bool:
@@ -89,7 +45,7 @@ _RAG_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "You are a Purdue policy assistant (assume all questions are related to Purdue, even if not explicitly stated). \n"
-            "Use ONLY the sources provided.\n\n"
+            "Use the sources provided.\n\n"
             "Structure (required):\n"
             "1) Start with **one short overview paragraph** (2–3 sentences) that directly answers the question "
             "in plain language. No bullets in this paragraph.\n"
@@ -109,14 +65,7 @@ _RAG_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def retrieve(question: str, top_k: int = 4) -> tuple[str, list]:
-    """
-    Pinecone vector retrieval; build LLM context string and document cards.
-
-    Uses cosine similarity scores directly from Pinecone (no reranking).
-
-    Returns:
-        (context, documents) in the same shape as the /ask JSON payload.
-    """
+    """Pinecone similarity search → (LLM context string, document cards)."""
     index_name = os.getenv("PINECONE_INDEX_NAME")
     if not index_name:
         raise RuntimeError("PINECONE_INDEX_NAME is not set in .env")
@@ -237,25 +186,7 @@ def retrieve(question: str, top_k: int = 4) -> tuple[str, list]:
 
 
 def query(question: str, top_k: int = 4) -> dict:
-    """
-    Run the full RAG pipeline and return a structured response.
-
-    Returns:
-        {
-            "answer": str,
-            "documents": [
-                {
-                    "document_id": str,
-                    "title": str,
-                    "domain": str,
-                    "url": str,
-                    "effective_date": str,
-                    "sections": [{"section_title": str, "text": str}, ...]
-                },
-                ...
-            ]
-        }
-    """
+    """Run the full RAG pipeline and return {"answer", "documents"}."""
     context, documents = retrieve(question, top_k=top_k)
 
     llm = ChatGoogleGenerativeAI(

@@ -1,12 +1,10 @@
 """
-Ingestion script for BoilerCheck.
-
 Reads Firestore collection `policies_with_images`, creates one vector entry
 per text section and one vector entry per image description, embeds with
 all-MiniLM-L6-v2, and upserts into Pinecone.
 
-Run once (or whenever the source data changes):
-    python ingest.py
+Run whenever the source data changes:
+    python ingest_with_images.py
 """
 
 import os
@@ -18,42 +16,21 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 
-load_dotenv()
+# .env and the Firebase service-account JSON live in the BoilerCheck repo root (parents[1]).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_FIREBASE_KEY_PATH = _REPO_ROOT / "gdg-web-scraping-data-firebase-adminsdk-fbsvc-d6a5997024.json"
+
+load_dotenv(_REPO_ROOT / ".env")
 
 COLLECTION_NAME = os.getenv("POLICIES_COLLECTION", "policies_with_images")
 
 
-def _backend_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
-def _firebase_key_path() -> str | None:
-    env_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
-    if env_path:
-        return str(Path(env_path).expanduser())
-
-    # Auto-detect one Firebase Admin key file in backend/ for local dev.
-    matches = sorted(_backend_root().glob("*firebase-adminsdk*.json"))
-    if len(matches) == 1:
-        return str(matches[0])
-
-    return None
-
-
 def _initialize_firestore_client():
-    """
-    Initialize Firestore using a Firebase Admin service-account JSON key.
-    """
-    key_path = _firebase_key_path()
-    if not key_path:
+    if not _FIREBASE_KEY_PATH.exists():
         raise RuntimeError(
-            "Firebase service-account JSON not found. Set FIREBASE_SERVICE_ACCOUNT_PATH, "
-            "or place exactly one '*firebase-adminsdk*.json' file in backend/."
+            f"Firebase service-account key not found at {_FIREBASE_KEY_PATH}. "
+            "Make sure it lives in the BoilerCheck repo root."
         )
-
-    key_file = Path(key_path)
-    if not key_file.exists():
-        raise RuntimeError(f"Firebase key file not found: {key_file}")
 
     try:
         firebase_admin = import_module("firebase_admin")
@@ -65,10 +42,10 @@ def _initialize_firestore_client():
         ) from import_error
 
     if not firebase_admin._apps:
-        cred = firebase_credentials.Certificate(str(key_file))
+        cred = firebase_credentials.Certificate(str(_FIREBASE_KEY_PATH))
         firebase_admin.initialize_app(cred)
 
-    print(f"Using Firebase service-account key: {key_file.name}")
+    print(f"Using Firebase service-account key: {_FIREBASE_KEY_PATH.name}")
     return firebase_firestore.client()
 
 

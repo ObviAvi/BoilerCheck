@@ -4,6 +4,27 @@ import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/**
+ * Phrases the RAG prompt nudges the model toward when it can't answer.
+ * We check the opening of the response so a legitimate "cannot" deep in a
+ * long answer doesn't hide sources.
+ */
+const REFUSAL_PATTERNS = [
+  /\bcannot confirm\b/i,
+  /\bnot enough information\b/i,
+  /\binsufficient information\b/i,
+  /\bunable to (answer|confirm|determine|provide)/i,
+  /\b(do not|don['’]t) have (enough |the |any )?(specific |relevant )?information\b/i,
+  /\bcan(not|['’]t) (answer|provide|determine|confirm)\b/i,
+  /\bno (relevant |specific )?information (is |was )?(available|provided)\b/i,
+];
+
+function isRefusalAnswer(text) {
+  if (!text) return false;
+  const opener = text.slice(0, 320);
+  return REFUSAL_PATTERNS.some((re) => re.test(opener));
+}
+
 export default function Home() {
   const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
   const [query, setQuery] = useState("");
@@ -14,6 +35,7 @@ export default function Home() {
   const [darkMode, setDarkMode] = useState(true);
   const [error, setError] = useState("");
   const [expandedSourceSections, setExpandedSourceSections] = useState({});
+  const [brokenImageUrls, setBrokenImageUrls] = useState(() => new Set());
   const abortRef = useRef(null);
 
   const SOURCE_TEXT_PREVIEW_CHARS = 220;
@@ -21,6 +43,18 @@ export default function Home() {
   const canAsk = useMemo(() => query.trim().length > 0 && !loading, [query, loading]);
   const retrievalPending = loading && documents === null;
   const showAnswerPanel = !retrievalPending && (documents !== null || streamingAnswer.length > 0);
+
+  /**
+   * Aux panels (Sources, Images) wait until the answer is fully streamed, then
+   * only render for non-refusal answers. This avoids showing citations for
+   * responses like "I cannot confirm based on provided info...".
+   */
+  const answerComplete = !loading && streamingAnswer.length > 0;
+  const isRefusal = useMemo(
+    () => answerComplete && isRefusalAnswer(streamingAnswer),
+    [answerComplete, streamingAnswer]
+  );
+  const showAuxPanels = answerComplete && !isRefusal;
   /** Stagger outer source cards slightly; section sub-boxes fade in one-by-one (global order) */
   const sourceCardStaggerMs = 120;
   const sourceSectionStaggerMs = 480;
@@ -43,6 +77,7 @@ export default function Home() {
       if (!Array.isArray(doc.images)) continue;
       for (const image of doc.images) {
         if (!image?.source_url) continue;
+        if (brokenImageUrls.has(image.source_url)) continue;
         flattened.push({
           ...image,
           document_id: doc.document_id,
@@ -53,8 +88,18 @@ export default function Home() {
     }
 
     return flattened;
-  }, [documents]);
-  const hasImageMatches = imageEntries.length > 0;
+  }, [documents, brokenImageUrls]);
+  const hasImageMatches = showAuxPanels && imageEntries.length > 0;
+
+  const markImageBroken = (url) => {
+    if (!url) return;
+    setBrokenImageUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  };
 
   /** Strip legacy placeholder tokens if the model mis-cites; normalize spacing */
   const answerMarkdown = useMemo(
@@ -82,6 +127,7 @@ export default function Home() {
     setDocuments(null);
     setStreamingAnswer("");
     setError("");
+    setBrokenImageUrls(new Set());
 
     try {
       const res = await fetch(`${apiBaseUrl}/ask/stream`, {
@@ -304,6 +350,7 @@ export default function Home() {
                   setDocuments(null);
                   setStreamingAnswer("");
                   setError("");
+                  setBrokenImageUrls(new Set());
                 }}
                 className={`rounded-2xl border px-6 py-3 text-sm font-medium transition ${theme.secondaryButton}`}
               >
@@ -323,7 +370,11 @@ export default function Home() {
 
         <section
           className={`mt-8 grid gap-5 ${
-            hasImageMatches ? "xl:grid-cols-[1.8fr_1.08fr_1.08fr]" : "lg:grid-cols-[1.8fr_1.1fr]"
+            isRefusal
+              ? ""
+              : hasImageMatches
+                ? "xl:grid-cols-[1.8fr_1.08fr_1.08fr]"
+                : "lg:grid-cols-[1.8fr_1.1fr]"
           } lg:gap-7 xl:gap-7`}
         >
           <div
@@ -421,6 +472,7 @@ export default function Home() {
             )}
           </div>
 
+          {!isRefusal && (
           <aside
             className={`rounded-[1.35rem] border p-5 transition-colors duration-500 sm:rounded-3xl sm:p-6 ${theme.card}`}
           >
@@ -428,7 +480,7 @@ export default function Home() {
               <p className={`text-[11px] font-semibold uppercase tracking-[0.2em] ${theme.muted}`}>
                 Sources
               </p>
-              {documents !== null && documents.length > 0 && (
+              {showAuxPanels && documents !== null && documents.length > 0 && (
                 <span className={`text-xs font-medium tabular-nums ${theme.faintText}`}>
                   {documents.length}
                 </span>
@@ -445,7 +497,7 @@ export default function Home() {
               </div>
             )}
 
-            {retrievalPending && (
+            {loading && (
               <div className="space-y-4">
                 <div className={`h-14 animate-pulse rounded-2xl ${theme.skeleton}`} />
                 <div className={`h-14 animate-pulse rounded-2xl ${theme.skeleton}`} />
@@ -453,7 +505,7 @@ export default function Home() {
               </div>
             )}
 
-            {documents !== null && (
+            {showAuxPanels && documents !== null && (
               <div className="space-y-4">
                 {documents.length === 0 ? (
                   <div
@@ -573,6 +625,7 @@ export default function Home() {
               </div>
             )}
           </aside>
+          )}
 
           {hasImageMatches && (
             <aside
@@ -604,6 +657,8 @@ export default function Home() {
                       src={image.source_url}
                       alt={image.filename || "Source image"}
                       loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={() => markImageBroken(image.source_url)}
                       className="h-40 w-full rounded-xl object-cover"
                     />
 

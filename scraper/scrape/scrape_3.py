@@ -2,11 +2,18 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-# ─────────────────────────────────────────────
-# Keywords — broad coverage across all 4 areas
-# ─────────────────────────────────────────────
+# Many purdue.edu subdomains sit behind Akamai/TSPD bot protection that serves
+# a JS challenge to clients with no User-Agent.
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
-# High-value URL path segments → strong signal
 HIGH_VALUE_PATHS = [
     "policy", "policies", "regulation", "regulations",
     "registrar", "housing", "financial-aid", "financialaid",
@@ -16,7 +23,6 @@ HIGH_VALUE_PATHS = [
     "appeal", "student-rights", "ombudsman",
 ]
 
-# Title keywords → medium-high signal
 TITLE_KEYWORDS = [
     "policy", "policies", "regulation", "procedure", "guidelines",
     "handbook", "requirements", "terms", "conditions", "agreement",
@@ -26,7 +32,6 @@ TITLE_KEYWORDS = [
     "housing", "residential", "academic", "enrollment", "registration",
 ]
 
-# Body keywords → weaker signal but still counts
 BODY_KEYWORDS = [
     "policy", "policies", "regulation", "procedure", "guidelines",
     "compliance", "code of conduct", "requirement", "requirements",
@@ -39,35 +44,17 @@ BODY_KEYWORDS = [
     "satisfactory academic progress", "handbook", "bulletin",
 ]
 
-SCORE_THRESHOLD = 10  # permissive gate — keep if score >= 10
+SCORE_THRESHOLD = 10
 
-
-# ─────────────────────────────────────────────
-# Useless page detector
-# ─────────────────────────────────────────────
 
 def is_definitely_useless(url: str, title: str, word_count: int, has_structure: bool) -> bool:
-    """
-    Returns True only if we're confident this page has nothing useful.
-    Errs heavily on the side of keeping pages.
-    """
-    title_lower = title.lower()
+    """Short page with no tables/lists — likely a stub, nav, or announcement."""
+    return word_count < 150 and not has_structure
 
-    # Very short page with no structure = probably a stub, nav page, or announcement
-    if word_count < 150 and not has_structure:
-        return True
-
-    return False
-
-
-# ─────────────────────────────────────────────
-# Scorer
-# ─────────────────────────────────────────────
 
 def score_page(url: str, title: str, text: str, word_count: int, has_structure: bool) -> int:
     """
-    Gate score — keep if >= SCORE_THRESHOLD (10).
-    Scores URL, title, and body separately with different weights.
+    Keyword-weighted relevance score. Keep if >= SCORE_THRESHOLD.
     No negative penalties — 0 means uncertain, not irrelevant.
     """
     score = 0
@@ -75,49 +62,40 @@ def score_page(url: str, title: str, text: str, word_count: int, has_structure: 
     title_lower = title.lower()
     text_lower  = text.lower()
 
-    # ── 1. URL path signals (strongest pre-content signal) ──
+    # URL path — strongest pre-content signal; only count once so it can't dominate.
     for seg in HIGH_VALUE_PATHS:
         if seg in url_lower:
-            score += 15  # each matching path segment is a strong signal
-            break        # only count once — we don't want URL to dominate
+            score += 15
+            break
 
-    # ── 2. Title keyword hits (high weight — title is curated) ──
     for kw in TITLE_KEYWORDS:
         if kw in title_lower:
-            score += 12  # title hit worth 12 each
+            score += 12
 
-    # ── 3. Body keyword hits (lower weight — noisy) ──
+    # Cap body hits per keyword to avoid runaway scores on repetitive pages.
     for kw in BODY_KEYWORDS:
         hits = text_lower.count(kw)
         if hits > 0:
-            score += min(hits * 3, 9)  # cap per-keyword contribution to avoid runaway scores
+            score += min(hits * 3, 9)
 
-    # ── 4. Page length boost (substantial content = more likely useful) ──
     if word_count >= 500:
         score += 8
     elif word_count >= 200:
         score += 4
 
-    # ── 5. Structured content boost (tables/lists = official doc pattern) ──
     if has_structure:
         score += 8
 
-    # ── 6. "Purdue" + any relevant term in title (very strong signal) ──
     if "purdue" in title_lower and any(kw in title_lower for kw in TITLE_KEYWORDS):
         score += 15
 
     return score
 
 
-# ─────────────────────────────────────────────
-# Scraper
-# ─────────────────────────────────────────────
-
 def scrape_policy_page_final(url: str) -> dict:
-    response = requests.get(url, timeout=10)
+    response = requests.get(url, timeout=10, headers=REQUEST_HEADERS)
     soup = BeautifulSoup(response.content, "html.parser")
 
-    # ── Title — try h1, fall back to <title> tag ──
     h1 = soup.find("h1")
     if h1:
         title = h1.get_text(strip=True)
@@ -126,7 +104,6 @@ def scrape_policy_page_final(url: str) -> dict:
     else:
         title = "Unknown Title"
 
-    # ── Dates — scan broadly, not just first <p> ──
     effective_date = ""
     last_revised   = ""
     for tag in soup.find_all(["p", "li", "span", "td"]):
@@ -136,7 +113,6 @@ def scrape_policy_page_final(url: str) -> dict:
         if not last_revised and re.search(r"date\s+last\s+revised|last\s+updated|last\s+modified", line, re.I):
             last_revised = re.sub(r"(date\s+last\s+revised|last\s+updated|last\s+modified)[:\-]?\s*", "", line, flags=re.I).strip()
 
-    # ── Sections — h2 AND h3, broader sibling capture ──
     sections = []
     all_section_text = []
 
@@ -160,7 +136,7 @@ def scrape_policy_page_final(url: str) -> dict:
             })
             all_section_text.append(joined)
 
-    # ── Fallback: if no h2/h3 sections found, grab all body text ──
+    # Fallback for pages with no h2/h3 structure.
     if not sections:
         body = soup.find("main") or soup.find("article") or soup.find("body")
         if body:
@@ -170,11 +146,8 @@ def scrape_policy_page_final(url: str) -> dict:
 
     full_text  = " ".join(all_section_text)
     word_count = len(full_text.split())
-
-    # ── Structure detection — has tables or lists? ──
     has_structure = bool(soup.find("table") or soup.find("ul") or soup.find("ol"))
 
-    # ── Useless check before scoring ──
     if is_definitely_useless(url, title, word_count, has_structure):
         final_score = 0
     else:

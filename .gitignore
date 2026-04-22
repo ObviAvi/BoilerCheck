@@ -31,12 +31,13 @@ build/
 # =============================================================================
 # Environment & secrets
 # =============================================================================
+# .env and the Firebase service-account JSON live in the BoilerCheck repo root.
+# These globs match at any depth, so the root copies are already ignored.
 .env
 .env.local
 .env.*.local
 .envrc
 *firebase-adminsdk*.json
-backend/*firebase-adminsdk*.json
 
 # =============================================================================
 # Testing & type checking
@@ -71,5 +72,14 @@ desktop.ini
 # Scraper
 # =============================================================================
 scrap/.venv
+
+# Scraped/downloaded images (re-generated on every crawl; classified metadata
+# lives in Firestore, so the local files are disposable).
 /images/
 scraper/images/
+scraper/crawler/data/images/
+**/data/images/
+
+# Local crawler output artifacts (JSON dumps, logs) if any are produced.
+scraper/crawler/data/*.json
+scraper/crawler/data/*.log

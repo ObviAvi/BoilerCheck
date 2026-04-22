@@ -6,6 +6,7 @@ import time
 import hashlib
 import os
 import sys
+from pathlib import Path
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -14,11 +15,12 @@ from firebase import firebase_write
 from crawler import classify_images
 from dotenv import load_dotenv
 
-load_dotenv()
+# .env lives in the BoilerCheck repo root (parents[2]).
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-# ── Config ────────────────────────────────────────────────────────────────────
-
-MAX_LINKS = 30
+MAX_LINKS = 120
+# Any link whose host doesn't match this suffix is rejected in get_links().
+ALLOWED_DOMAIN_SUFFIX = "purdue.edu"
 
 BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGE_DIR = os.path.join(BASE_DIR, "crawler", "data", "images")
@@ -31,17 +33,42 @@ IMAGE_ATTRS = [
     ("img", "data-src"),
 ]
 
+# Many purdue.edu subdomains sit behind Akamai/TSPD bot protection that serves
+# a JS challenge to clients with no User-Agent.
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def make_document_id(url: str) -> str:
     digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:20]
     return f"policy_{digest}"
 
 
+def _is_allowed_host(netloc: str) -> bool:
+    """Accept any host that equals or is a subdomain of ALLOWED_DOMAIN_SUFFIX."""
+    if not ALLOWED_DOMAIN_SUFFIX:
+        return True
+    host = netloc.lower().split(":", 1)[0]  # strip any :port
+    return host == ALLOWED_DOMAIN_SUFFIX or host.endswith("." + ALLOWED_DOMAIN_SUFFIX)
+
+
 def get_links(url: str, starter_url: str) -> list:
+    """
+    Collect up to MAX_LINKS outbound links from `url`.
+
+    Links must resolve to a host under ALLOWED_DOMAIN_SUFFIX. No path
+    restriction: landing pages routinely link out to their real content
+    under a different subpath (/policies/ → /vpec/policies/..., etc.).
+    """
     try:
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, timeout=10, headers=REQUEST_HEADERS)
         if r.status_code != 200:
             return []
 
@@ -53,12 +80,13 @@ def get_links(url: str, starter_url: str) -> list:
             full_url = urljoin(url, href).split('#')[0]
             parsed = urlparse(full_url)
 
-            if parsed.netloc != urlparse(starter_url).netloc:
+            if parsed.scheme not in ("http", "https"):
                 continue
-            if not parsed.path.startswith(urlparse(starter_url).path):
+            if not _is_allowed_host(parsed.netloc):
                 continue
-            if full_url not in links:
-                links.append(full_url)
+            if full_url in links:
+                continue
+            links.append(full_url)
             if len(links) >= MAX_LINKS:
                 break
 
@@ -69,8 +97,6 @@ def get_links(url: str, starter_url: str) -> list:
         return []
 
 
-# ── Image helpers ─────────────────────────────────────────────────────────────
-
 def resolve_url(src, page_url):
     if not src or src.startswith("data:"):
         return None
@@ -79,7 +105,7 @@ def resolve_url(src, page_url):
 
 def download_image(img_url):
     try:
-        resp = requests.get(img_url, timeout=10)
+        resp = requests.get(img_url, timeout=10, headers=REQUEST_HEADERS)
         resp.raise_for_status()
         return resp.content
     except Exception as e:
@@ -138,7 +164,12 @@ def extract_images(soup, page_url, document_id, seen_hashes):
             continue
 
         width, height = get_image_dimensions(img_bytes)
-        if 0 < width < MIN_IMAGE_WIDTH or 0 < height < MIN_IMAGE_HEIGHT:
+        # Skip dimensionless images (typically decorative SVGs where we can't
+        # parse dimensions). Classifying them wastes a Gemini call and errors
+        # out downstream ("cannot write empty image").
+        if width == 0 or height == 0:
+            continue
+        if width < MIN_IMAGE_WIDTH or height < MIN_IMAGE_HEIGHT:
             continue
 
         img_hash = hashlib.md5(img_bytes).hexdigest()
@@ -170,8 +201,6 @@ def extract_images(soup, page_url, document_id, seen_hashes):
     return image_records
 
 
-# ── Crawler ───────────────────────────────────────────────────────────────────
-
 def crawler(starter_url: str, max_pages: int = 10):
     stack    = [starter_url]
     visited  = set()
@@ -197,23 +226,18 @@ def crawler(starter_url: str, max_pages: int = 10):
         pages_crawled += 1
 
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(url, timeout=10, headers=REQUEST_HEADERS)
             if r.status_code != 200:
                 print(f"  Skipping (status {r.status_code})")
                 continue
 
             soup = BeautifulSoup(r.content, 'html.parser')
 
-            # ── Scrape text + score ──────────────────────────────
             page_data = scrape_policy_page_final(url)
             page_data["document_id"] = make_document_id(page_data["url"])
-
-            # ── Extract images (raw, no classification yet) ──────
             page_data["images"] = extract_images(
                 soup, url, page_data["document_id"], seen_hashes
             )
-
-            # ── Classify images via classify_images.py ───────────
             classify_images.classify_images_for_data([page_data], None)
 
             all_data.append(page_data)
@@ -223,7 +247,6 @@ def crawler(starter_url: str, max_pages: int = 10):
             print(f"   Score: {score}  {label}  — {page_data['title']}")
             print(f"   Images: {len(page_data['images'])}")
 
-            # ── Upload to policies (no images) if new ────────────
             doc_id   = page_data["document_id"]
             page_url = page_data["url"]
 
@@ -238,10 +261,10 @@ def crawler(starter_url: str, max_pages: int = 10):
                     existing_doc_ids.add(doc_id)
                     existing_urls.add(page_url)
 
-            # ── Always upload to policies_with_images ────────────
+            # policies_with_images is always written (merge=True) so image
+            # updates on re-crawl don't require a full doc replacement.
             firebase_write.upload_scraped_policy_with_images(page_data, skip_if_exists=False)
 
-            # ── Discover links ───────────────────────────────────
             links = get_links(url, starter_url)
             for link in reversed(links):
                 if link not in visited:
@@ -253,7 +276,6 @@ def crawler(starter_url: str, max_pages: int = 10):
             print(f"[crawler] Error on {url}: {e}")
             continue
 
-    # ── Filter & output ───────────────────────────────────────────────────────
     relevant   = [d for d in all_data if d["score"] > 0]
     irrelevant = [d for d in all_data if d["score"] <= 0]
 
@@ -290,6 +312,20 @@ def crawler(starter_url: str, max_pages: int = 10):
     )
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
-starter_url = "https://catalog.purdue.edu/"
-crawler(starter_url, max_pages=50)
+# Usage:
+#   python dynamic_crawlerV2.py                             # default catalog scrape
+#   python dynamic_crawlerV2.py <starter_url>               # custom URL, 50 pages
+#   python dynamic_crawlerV2.py <starter_url> <max_pages>   # custom URL + page cap
+if __name__ == "__main__":
+    default_url = "https://catalog.purdue.edu/"
+    default_pages = 50
+
+    starter_url = sys.argv[1] if len(sys.argv) > 1 else default_url
+    try:
+        max_pages = int(sys.argv[2]) if len(sys.argv) > 2 else default_pages
+    except ValueError:
+        print(f"[entrypoint] Invalid max_pages '{sys.argv[2]}', falling back to {default_pages}")
+        max_pages = default_pages
+
+    print(f"[entrypoint] starter_url={starter_url}  max_pages={max_pages}")
+    crawler(starter_url, max_pages=max_pages)

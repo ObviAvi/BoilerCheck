@@ -21,11 +21,12 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from pinecone import Pinecone
 
-load_dotenv()
-
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+load_dotenv(_project_root() / ".env")
 
 
 def _mock_data_path() -> Path:

@@ -1,10 +1,7 @@
 """
-Ingestion script for BoilerCheck policies (text only).
-
-Reads Firestore collection `policies`, creates one vector entry per text
-section, embeds with all-MiniLM-L6-v2, and upserts into Pinecone.
-
-This script intentionally ignores images and focuses on the text-only schema.
+Reads Firestore collection `policies`, splits each section into chunks with
+RecursiveCharacterTextSplitter, embeds with all-MiniLM-L6-v2, and upserts
+into Pinecone. Images are ignored — see ingest_with_images.py for those.
 
 Run:
     python ingest_policies_no_images.py
@@ -22,41 +19,23 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-load_dotenv()
+# .env and the Firebase service-account JSON live in the BoilerCheck repo root (parents[1]).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_FIREBASE_KEY_PATH = _REPO_ROOT / "gdg-web-scraping-data-firebase-adminsdk-fbsvc-d6a5997024.json"
+
+load_dotenv(_REPO_ROOT / ".env")
 
 COLLECTION_NAME = os.getenv("POLICIES_TEXT_COLLECTION", "policies")
 CHUNK_SIZE = int(os.getenv("POLICIES_TEXT_CHUNK_SIZE", "1200"))
 CHUNK_OVERLAP = int(os.getenv("POLICIES_TEXT_CHUNK_OVERLAP", "150"))
 
 
-def _backend_root() -> Path:
-    return Path(__file__).resolve().parent
-
-
-def _firebase_key_path() -> str | None:
-    env_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
-    if env_path:
-        return str(Path(env_path).expanduser())
-
-    # Auto-detect one Firebase Admin key file in backend/ for local dev.
-    matches = sorted(_backend_root().glob("*firebase-adminsdk*.json"))
-    if len(matches) == 1:
-        return str(matches[0])
-
-    return None
-
-
 def _initialize_firestore_client():
-    key_path = _firebase_key_path()
-    if not key_path:
+    if not _FIREBASE_KEY_PATH.exists():
         raise RuntimeError(
-            "Firebase service-account JSON not found. Set FIREBASE_SERVICE_ACCOUNT_PATH, "
-            "or place exactly one '*firebase-adminsdk*.json' file in backend/."
+            f"Firebase service-account key not found at {_FIREBASE_KEY_PATH}. "
+            "Make sure it lives in the BoilerCheck repo root."
         )
-
-    key_file = Path(key_path)
-    if not key_file.exists():
-        raise RuntimeError(f"Firebase key file not found: {key_file}")
 
     try:
         firebase_admin = import_module("firebase_admin")
@@ -68,10 +47,10 @@ def _initialize_firestore_client():
         ) from import_error
 
     if not firebase_admin._apps:
-        cred = firebase_credentials.Certificate(str(key_file))
+        cred = firebase_credentials.Certificate(str(_FIREBASE_KEY_PATH))
         firebase_admin.initialize_app(cred)
 
-    print(f"Using Firebase service-account key: {key_file.name}")
+    print(f"Using Firebase service-account key: {_FIREBASE_KEY_PATH.name}")
     return firebase_firestore.client()
 
 
@@ -86,10 +65,6 @@ def _safe_int(value) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
-
-
-def _safe_bool(value) -> bool:
-    return bool(value)
 
 
 def _safe_timestamp(value) -> str:
@@ -114,10 +89,10 @@ def _base_meta(record: dict) -> dict:
         "domain": _safe_str(record.get("domain")),
         "url": _safe_str(record.get("url")),
         "effective_date": _safe_str(record.get("effective_date")),
-        "has_structure": _safe_bool(record.get("has_structure", False)),
+        "has_structure": bool(record.get("has_structure", False)),
         "last_revised": _safe_str(record.get("last_revised")),
         "last_updated": _safe_timestamp(record.get("last_updated")),
-        "relevant": _safe_bool(record.get("relevant", False)),
+        "relevant": bool(record.get("relevant", False)),
         "score": _safe_int(record.get("score", 0)),
     }
 

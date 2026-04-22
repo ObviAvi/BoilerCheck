@@ -30,12 +30,17 @@ Policy records are read from Firestore, converted into text and image-descriptio
 
 ```
 BoilerCheck/
+├── .env                                            API keys (not committed)
+├── gdg-web-scraping-data-firebase-adminsdk-*.json  Firebase service-account key (not committed)
+├── requirements.txt                                Consolidated Python deps
 ├── backend/
 │   ├── main.py          FastAPI server — exposes POST /ask
-│   ├── rag.py           Full RAG pipeline (embed → retrieve → rerank → generate)
-│   ├── ingest.py        One-time script to embed & upsert data into Pinecone
-│   ├── requirements.txt Python dependencies
-│   └── .env             API keys (not committed)
+│   ├── rag.py           Full RAG pipeline (embed → retrieve → generate)
+│   ├── ingest_with_images.py       Embed & upsert text + image chunks into Pinecone
+│   ├── ingest_policies_no_images.py Embed & upsert text-only chunks
+│   └── requirements.txt            Points at ../requirements.txt
+├── scraper/             Crawler + Firestore writer
+├── benchmark/           Retrieval benchmarking harness
 ├── data/
 │   └── rag_mock_data.json  Legacy mock data (no longer used by default ingest path)
 ├── src/app/
@@ -65,7 +70,7 @@ npm install
 ### 2. Set up the Python backend
 
 ```powershell
-cd backend
+# from BoilerCheck/
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -73,7 +78,7 @@ pip install -r requirements.txt
 
 ### 3. Configure environment variables
 
-Edit `backend/.env` with your real keys:
+Create `BoilerCheck/.env` (repo root — all scripts load it from here):
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -88,9 +93,6 @@ RAG_CANDIDATE_K=16
 
 # Optional (defaults to policies_with_images)
 POLICIES_COLLECTION=policies_with_images
-
-# Optional if key file is not stored in backend/
-FIREBASE_SERVICE_ACCOUNT_PATH=C:\\path\\to\\firebase-adminsdk.json
 ```
 
 Create your Pinecone index with these settings:
@@ -98,36 +100,37 @@ Create your Pinecone index with these settings:
 - **Metric:** `cosine`
 - **Type:** Serverless (AWS us-east-1)
 
-### 4. Ingest policy data into Pinecone
-
-`backend/ingest.py` reads records from Firestore collection `policies_with_images`
-(or `POLICIES_COLLECTION` if set), then uploads text + image chunks.
+### 4. Add the Firebase service-account key
 
 Download a Firebase Admin SDK JSON key (Firebase Console → Project settings →
-Service accounts → Generate new private key), then either:
+Service accounts → Generate new private key) and drop it in the **BoilerCheck
+repo root** with its original filename (e.g. `gdg-web-scraping-data-firebase-adminsdk-fbsvc-d6a5997024.json`).
 
-1. Place it in `backend/` with a filename containing `firebase-adminsdk`, or
-2. Set `FIREBASE_SERVICE_ACCOUNT_PATH` in your shell.
+All ingest + scraper scripts read it from this hardcoded location. `.gitignore`
+already excludes `*firebase-adminsdk*.json`.
 
-Run this once to embed and upload all chunks:
+### 5. Ingest policy data into Pinecone
+
+`backend/ingest_with_images.py` reads records from Firestore collection `policies_with_images`
+(or `POLICIES_COLLECTION` if set), then uploads text + image chunks.
 
 ```powershell
-# from backend/ with .venv active
-$env:FIREBASE_SERVICE_ACCOUNT_PATH="$PWD\your-firebase-adminsdk.json"
-python ingest.py
+# from BoilerCheck/ with .venv active
+cd backend
+python ingest_with_images.py
 ```
 
 This only needs to be re-run when Firestore policy records change.
 
-### 5. Run the app
+### 6. Run the app
 
 Open two terminals:
 
 ```powershell
-# Terminal 1 — backend (from backend/ with .venv active)
+# Terminal 1 — backend (from BoilerCheck/backend/ with .venv active)
 python main.py
 
-# Terminal 2 — frontend (from project root)
+# Terminal 2 — frontend (from BoilerCheck/)
 npm run dev
 ```
 

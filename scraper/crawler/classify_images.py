@@ -3,25 +3,20 @@ import os
 import base64
 import time
 import io
+from pathlib import Path
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# ── Config ───────────────────────────────────────────────────────────────────
+# .env lives in the BoilerCheck repo root (parents[2]).
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGE_DIR = os.path.join(BASE_DIR, "crawler", "data", "images")
-
-JSON_FILES = [
-    os.path.join(BASE_DIR, "data", "housing.json"),
-    os.path.join(BASE_DIR, "data", "zucrow_2024.json"),
-]
 
 IMAGE_TYPES = [
     "diagram_or_flowchart",
@@ -42,10 +37,8 @@ Respond with ONLY a JSON object — no markdown, no explanation. Format:
   "description": "<2-3 sentence description useful for a policy assistant RAG system. Focus on what the image communicates, not how it looks.>"
 }}"""
 
-DELAY_BETWEEN_CALLS = 1.5
+DELAY_BETWEEN_CALLS = 0.5
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def image_to_base64(filepath):
     ext = filepath.rsplit(".", 1)[-1].lower()
@@ -83,16 +76,6 @@ def classify_image(client, filepath):
     return json.loads(raw)
 
 
-def load_json(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
 def get_all_images(data):
     """Works whether the JSON is a single dict (PDF) or a list of pages (crawler)."""
     if isinstance(data, list):
@@ -100,22 +83,20 @@ def get_all_images(data):
         for page in data:
             images.extend(page.get("images", []))
         return images
-    else:
-        return data.get("images", [])
+    return data.get("images", [])
 
 
 def classify_images_for_data(data: list, json_path):
     """
-    Called externally by dynamic_crawlerV2.py to classify images
-    in an already-loaded data list. json_path can be None when
-    called from the crawler since we don't need to save to disk.
+    Classify images in an already-loaded data list. Mutates records in place,
+    setting `image_type` and `description`. json_path is accepted for API
+    compatibility but currently unused — persistence is handled by the caller.
     """
     if not GEMINI_API_KEY:
         raise EnvironmentError("Set the GEMINI_API_KEY environment variable first.")
 
     client = genai.Client(api_key=GEMINI_API_KEY)
     images = get_all_images(data)
-
     if not images:
         return
 
@@ -125,7 +106,6 @@ def classify_images_for_data(data: list, json_path):
 
         if record.get("description") and record.get("image_type"):
             continue
-
         if not filepath or not os.path.exists(filepath):
             continue
 
@@ -142,62 +122,3 @@ def classify_images_for_data(data: list, json_path):
             record["description"] = ""
 
         time.sleep(DELAY_BETWEEN_CALLS)
-
-
-# ── Main (standalone usage) ───────────────────────────────────────────────────
-
-def main():
-    if not GEMINI_API_KEY:
-        raise EnvironmentError("Set the GEMINI_API_KEY environment variable first.")
-
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
-    for json_path in JSON_FILES:
-        if not os.path.exists(json_path):
-            print(f"Skipping {json_path} — file not found.")
-            continue
-
-        print(f"\nProcessing {json_path} ...")
-        data = load_json(json_path)
-        images = get_all_images(data)
-
-        if not images:
-            print("  No images found.")
-            continue
-
-        total = len(images)
-        print(f"  Found {total} images.")
-
-        for i, record in enumerate(images):
-            filepath = os.path.join(IMAGE_DIR, record.get("filename", ""))
-
-            if record.get("description") and record.get("image_type"):
-                print(f"  [{i+1}/{total}] Skipping (already classified): {record['filename']}")
-                continue
-
-            if not filepath or not os.path.exists(filepath):
-                print(f"  [{i+1}/{total}] File not found, skipping: {filepath}")
-                continue
-
-            print(f"  [{i+1}/{total}] Classifying: {record['filename']} ...", end=" ", flush=True)
-
-            try:
-                result = classify_image(client, filepath)
-                record["image_type"]  = result.get("image_type", "other")
-                record["description"] = result.get("description", "")
-                print(record["image_type"])
-            except Exception as e:
-                print(f"ERROR — {e}")
-                record["image_type"]  = "error"
-                record["description"] = ""
-
-            save_json(json_path, data)
-            time.sleep(DELAY_BETWEEN_CALLS)
-
-        print(f"  Done with {json_path}.")
-
-    print("\nAll files processed.")
-
-
-if __name__ == "__main__":
-    main()

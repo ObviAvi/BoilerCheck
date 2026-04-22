@@ -20,9 +20,9 @@ import numpy as np
 from dotenv import load_dotenv
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-load_dotenv()
+# .env lives in the BoilerCheck repo root (parents[1]).
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-# Allow running from project root
 sys.path.insert(0, os.path.dirname(__file__))
 
 from build_eval_set import load_chunks
@@ -45,7 +45,7 @@ def build_faiss_index(embeddings: np.ndarray):
     import faiss
 
     dim = embeddings.shape[1]
-    # Use inner product since embeddings are normalized
+    # Inner product — embeddings are L2-normalized so this is cosine similarity.
     index = faiss.IndexFlatIP(dim)
     index.add(embeddings)
     return index
@@ -75,7 +75,6 @@ def run_single_combo(
         print(f"  Reranker:  {reranker_key} ({rer_cfg['name']})")
         print(f"{'='*70}")
 
-    # --- Build index ---
     chunk_ids = [c[0] for c in chunks]
     chunk_texts = [c[1] for c in chunks]
 
@@ -97,7 +96,6 @@ def run_single_combo(
 
     reranker = Reranker(reranker_key, rer_cfg)
 
-    # --- Evaluate each query ---
     query_results = []
     total_latency_ms = 0
 
@@ -105,12 +103,10 @@ def run_single_combo(
         query = q["query"]
         relevant_ids = set(q["relevant_chunk_ids"])
 
-        # Embed query
         t0 = time.time()
         q_emb = embedder.embed_query(query)
         embed_query_time = time.time() - t0
 
-        # Retrieve
         t0 = time.time()
         indices, scores = retrieve_from_faiss(index, q_emb, RETRIEVE_K)
         retrieve_time = time.time() - t0
@@ -118,7 +114,6 @@ def run_single_combo(
         retrieved_ids = [chunk_ids[i] for i in indices if i < len(chunk_ids)]
         retrieved_texts = [chunk_texts[i] for i in indices if i < len(chunk_ids)]
 
-        # Rerank
         t0 = time.time()
         reranked = reranker.rerank(query, retrieved_texts, retrieved_ids, RERANK_TOP_K)
         rerank_time = time.time() - t0
@@ -127,7 +122,6 @@ def run_single_combo(
         latency_ms = (embed_query_time + retrieve_time + rerank_time) * 1000
         total_latency_ms += latency_ms
 
-        # Compute metrics
         metrics = compute_all_metrics(final_ids, relevant_ids, RERANK_TOP_K)
         metrics["latency_ms"] = round(latency_ms, 2)
         metrics["query"] = query
@@ -140,7 +134,6 @@ def run_single_combo(
             print(f"  [{qi+1:2d}/{len(eval_set)}] {hit}  MRR={metrics['mrr@k']:.2f}  "
                   f"P@k={metrics['context_precision@k']:.2f}  {latency_ms:6.1f}ms  {query[:50]}")
 
-    # --- Aggregate ---
     n = len(query_results)
     agg = {
         "hit_rate@k": sum(r["hit_rate@k"] for r in query_results) / n,
@@ -204,13 +197,11 @@ def main():
     combos = []
 
     if args.bench_pass == 1:
-        # Sweep all embeddings with fixed current reranker
         reranker = "cross-encoder-minilm"
         for emb_key in EMBEDDING_MODELS:
             combos.append((emb_key, reranker))
 
     elif args.bench_pass == 2:
-        # Sweep all rerankers with fixed embedding
         if not args.embedding:
             print("ERROR: --pass 2 requires --embedding <key>")
             sys.exit(1)
@@ -225,7 +216,6 @@ def main():
             for rer_key in RERANKER_MODELS:
                 combos.append((emb_key, rer_key))
     else:
-        # Default: run baseline
         combos.append(("minilm-l6-v2", "cross-encoder-minilm"))
 
     print(f"\nRunning {len(combos)} combination(s)...\n")
